@@ -1,0 +1,4 @@
+/* App-level overrides — component styles live in Tailwind utilities */
+@media print {
+  nav, aside, header, .no-print { display: none !important; }
+}
