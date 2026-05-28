@@ -14,14 +14,19 @@ import { format } from 'date-fns'
 
 const STATUSES = ['Pending', 'Confirmed', 'Checked In', 'Checked Out', 'Cancelled']
 
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL
+
 // Calls the Supabase Edge Function to send transactional email
 async function triggerEmail(type, booking) {
   if (!booking.guest_email) return { skipped: true }
   try {
-    const { data, error } = await supabase.functions.invoke('send-email', {
-      body: { type, booking },
+    const res = await fetch(`${SUPABASE_URL}/functions/v1/send-email`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ type, booking }),
     })
-    if (error) throw error
+    const data = await res.json()
+    if (!res.ok) throw new Error(data.error ?? `HTTP ${res.status}`)
     return data
   } catch (err) {
     console.error('Email trigger failed:', err)
