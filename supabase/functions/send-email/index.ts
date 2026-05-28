@@ -2,7 +2,7 @@ import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 
 const RESEND_API_KEY = Deno.env.get('RESEND_API_KEY') ?? ''
 const HOTEL_NAME     = Deno.env.get('HOTEL_NAME')     ?? 'Kasubay Hotel'
-const HOTEL_EMAIL    = Deno.env.get('HOTEL_EMAIL')    ?? 'noreply@kasubayhotel.com'
+const HOTEL_EMAIL    = Deno.env.get('HOTEL_EMAIL')    ?? 'onboarding@resend.dev'
 const APP_URL        = Deno.env.get('APP_URL')        ?? 'http://localhost:5173'
 
 const corsHeaders = {
