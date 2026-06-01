@@ -1,11 +1,14 @@
 import { useEffect, useState } from 'react'
+import * as XLSX from 'xlsx'
 import { supabase } from '@/lib/supabase'
 import { formatCurrency, calculateRetentionMetrics } from '@/lib/utils'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { TrendingUp, TrendingDown, DollarSign, CreditCard, Repeat, Percent, XCircle } from 'lucide-react'
+import { TrendingUp, TrendingDown, DollarSign, CreditCard, Repeat, Percent, XCircle, Download, FileText, FileSpreadsheet } from 'lucide-react'
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell,
@@ -14,6 +17,13 @@ import { format, startOfMonth, endOfMonth, subMonths } from 'date-fns'
 import { getStatusColor } from '@/lib/utils'
 
 const COLORS = ['hsl(43,78%,48%)', '#3b82f6', '#22c55e', '#ef4444', '#8b5cf6']
+const PERIOD_LABELS = {
+  today: 'Today',
+  week: 'This Week',
+  month: 'This Month',
+  year: 'This Year',
+  all: 'All Time',
+}
 
 export default function Revenue() {
   const [bookings, setBookings] = useState([])
@@ -68,6 +78,67 @@ export default function Revenue() {
     }, {})
   )
 
+  const periodLabel = PERIOD_LABELS[period] || 'Revenue'
+  const exportFileName = `revenue-${period}-${format(new Date(), 'yyyy-MM-dd')}`
+
+  function buildTransactionRows() {
+    return periodBookings.map(b => ({
+      Date: b.created_at ? format(new Date(b.created_at), 'yyyy-MM-dd') : '',
+      'Transaction Code': b.transaction_code || '',
+      'Guest Name': b.guest_name || '',
+      Room: b.room_name || '',
+      'Payment Method': b.payment_method || '',
+      Amount: Number(b.total_amount) || 0,
+      Status: b.status || '',
+    }))
+  }
+
+  function buildSummaryRows() {
+    return [
+      { Metric: 'Period', Value: periodLabel },
+      { Metric: 'Generated Date', Value: format(new Date(), 'yyyy-MM-dd HH:mm') },
+      { Metric: 'Total Revenue', Value: totalRevenue },
+      { Metric: 'Bookings', Value: totalBookings },
+      { Metric: 'Average per Booking', Value: activePeriodBookings.length ? totalRevenue / activePeriodBookings.length : 0 },
+      { Metric: 'Cash Bookings', Value: activePeriodBookings.filter(b => b.payment_method === 'Cash').length },
+      { Metric: 'GCash Bookings', Value: activePeriodBookings.filter(b => b.payment_method === 'GCash').length },
+      { Metric: 'Repeat Guests', Value: retention.repeatGuests },
+      { Metric: 'Rebooking Rate', Value: `${retention.rebookingRate.toFixed(1)}%` },
+      { Metric: 'Cancellation Rate', Value: `${retention.cancellationRate.toFixed(1)}%` },
+    ]
+  }
+
+  function exportCSV() {
+    const ws = XLSX.utils.json_to_sheet(buildTransactionRows())
+    const csv = XLSX.utils.sheet_to_csv(ws)
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `${exportFileName}.csv`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
+  function exportExcel() {
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(buildSummaryRows()), 'Summary')
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(buildTransactionRows()), 'Transactions')
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(monthly.map(row => ({
+      Month: row.name,
+      Revenue: row.total,
+    }))), 'Monthly Revenue')
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(byRoom.map(row => ({
+      Room: row.name || 'Unknown',
+      Revenue: row.value,
+    }))), 'Revenue by Room')
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(byPayment.map(row => ({
+      'Payment Method': row.name || 'Unknown',
+      Revenue: row.value,
+    }))), 'Payment Method')
+    XLSX.writeFile(wb, `${exportFileName}.xlsx`)
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -75,16 +146,36 @@ export default function Revenue() {
           <h1 className="text-2xl font-bold">Revenue & Income</h1>
           <p className="text-muted-foreground text-sm">Financial overview</p>
         </div>
-        <Select value={period} onValueChange={setPeriod}>
-          <SelectTrigger className="w-36"><SelectValue /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value="today">Today</SelectItem>
-            <SelectItem value="week">This Week</SelectItem>
-            <SelectItem value="month">This Month</SelectItem>
-            <SelectItem value="year">This Year</SelectItem>
-            <SelectItem value="all">All Time</SelectItem>
-          </SelectContent>
-        </Select>
+        <div className="flex items-center gap-2">
+          <Select value={period} onValueChange={setPeriod}>
+            <SelectTrigger className="w-36"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="today">Today</SelectItem>
+              <SelectItem value="week">This Week</SelectItem>
+              <SelectItem value="month">This Month</SelectItem>
+              <SelectItem value="year">This Year</SelectItem>
+              <SelectItem value="all">All Time</SelectItem>
+            </SelectContent>
+          </Select>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button className="gap-2">
+                <Download className="h-4 w-4" />
+                Export
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={exportExcel} className="gap-2 cursor-pointer">
+                <FileSpreadsheet className="h-4 w-4 text-green-600" />
+                Export as Excel (.xlsx)
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={exportCSV} className="gap-2 cursor-pointer">
+                <FileText className="h-4 w-4 text-blue-600" />
+                Export as CSV (.csv)
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
       </div>
 
       <div className="grid grid-cols-2 lg:grid-cols-4 xl:grid-cols-7 gap-4">
