@@ -1,16 +1,31 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 
-const RESEND_API_KEY = Deno.env.get('RESEND_API_KEY') ?? ''
-const HOTEL_NAME     = Deno.env.get('HOTEL_NAME')     ?? 'Kasubay Hotel'
-const HOTEL_EMAIL    = Deno.env.get('HOTEL_EMAIL')    ?? 'onboarding@resend.dev'
-const APP_URL        = Deno.env.get('APP_URL')        ?? 'http://localhost:5173'
+const BREVO_SMTP_LOGIN    = Deno.env.get('BREVO_SMTP_LOGIN')    ?? ''
+const BREVO_SMTP_PASSWORD = Deno.env.get('BREVO_SMTP_PASSWORD') ?? ''
+const HOTEL_NAME          = Deno.env.get('HOTEL_NAME')          ?? 'Kasubay Hotel'
+const HOTEL_EMAIL         = Deno.env.get('HOTEL_EMAIL')         ?? 'noreply@kasubayhotel.com'
+const APP_URL             = Deno.env.get('APP_URL')             ?? 'http://localhost:5173'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
-// ── Email templates ──────────────────────────────────────────────────────────
+// ── Helpers ──────────────────────────────────────────────────────────────────
+
+function formatDate(d: string) {
+  return new Date(d).toLocaleDateString('en-PH', { weekday: 'short', year: 'numeric', month: 'long', day: 'numeric' })
+}
+
+function nights(b: BookingData) {
+  return Math.round((new Date(b.check_out).getTime() - new Date(b.check_in).getTime()) / 86400000)
+}
+
+function guestLine(b: BookingData) {
+  return `${b.adults} adult${b.adults > 1 ? 's' : ''}${b.children > 0 ? `, ${b.children} child${b.children > 1 ? 'ren' : ''}` : ''}`
+}
+
+// ── Base layout ───────────────────────────────────────────────────────────────
 
 function baseLayout(content: string) {
   return `
@@ -37,11 +52,14 @@ function baseLayout(content: string) {
     .code-box .code { font-family:monospace; font-size:22px; font-weight:700; color:#c89b2a; letter-spacing:2px; }
     .code-box p { margin:6px 0 0; font-size:12px; color:#92400e; }
     .btn { display:inline-block; background:#c89b2a; color:#fff !important; text-decoration:none; padding:13px 32px; border-radius:8px; font-weight:700; font-size:14px; margin:8px 0; }
-    .btn-outline { background:#fff; color:#c89b2a !important; border:2px solid #c89b2a; }
     .footer { background:#f8fafc; padding:20px 32px; text-align:center; font-size:12px; color:#94a3b8; border-top:1px solid #e2e8f0; }
     .badge { display:inline-block; padding:3px 10px; border-radius:99px; font-size:12px; font-weight:600; }
-    .badge-pending   { background:#fef3c7; color:#92400e; }
-    .badge-confirmed { background:#dcfce7; color:#166534; }
+    .badge-confirmed  { background:#dcfce7; color:#166534; }
+    .badge-checkedin  { background:#dbeafe; color:#1e40af; }
+    .badge-checkedout { background:#f1f5f9; color:#475569; }
+    .badge-cancelled  { background:#fee2e2; color:#991b1b; }
+    .alert-red { background:#fff1f2; border:1px solid #fecdd3; border-radius:8px; padding:16px 20px; margin:16px 0; }
+    .alert-blue { background:#eff6ff; border:1px solid #bfdbfe; border-radius:8px; padding:16px 20px; margin:16px 0; }
   </style>
 </head>
 <body>
@@ -59,8 +77,10 @@ function baseLayout(content: string) {
 </html>`
 }
 
+// ── Email templates ───────────────────────────────────────────────────────────
+
 function confirmationEmail(b: BookingData) {
-  const nights = Math.round((new Date(b.check_out).getTime() - new Date(b.check_in).getTime()) / 86400000)
+  const n = nights(b)
   return baseLayout(`
     <h2>Booking Confirmed! 🎉</h2>
     <p>Hi <strong>${b.guest_name}</strong>, great news — your booking at <strong>${HOTEL_NAME}</strong> has been <span class="badge badge-confirmed">Confirmed</span>.</p>
@@ -75,8 +95,8 @@ function confirmationEmail(b: BookingData) {
       <div class="summary-row"><span class="label">Room</span><span>${b.room_name}</span></div>
       <div class="summary-row"><span class="label">Check-In</span><span>${formatDate(b.check_in)}</span></div>
       <div class="summary-row"><span class="label">Check-Out</span><span>${formatDate(b.check_out)}</span></div>
-      <div class="summary-row"><span class="label">Duration</span><span>${nights} night${nights !== 1 ? 's' : ''}</span></div>
-      <div class="summary-row"><span class="label">Guests</span><span>${b.adults} adult${b.adults > 1 ? 's' : ''}${b.children > 0 ? `, ${b.children} child${b.children > 1 ? 'ren' : ''}` : ''}</span></div>
+      <div class="summary-row"><span class="label">Duration</span><span>${n} night${n !== 1 ? 's' : ''}</span></div>
+      <div class="summary-row"><span class="label">Guests</span><span>${guestLine(b)}</span></div>
       <div class="summary-row"><span class="label">Payment Method</span><span>${b.payment_method}</span></div>
       ${b.promo_code ? `<div class="summary-row"><span class="label">Promo Applied</span><span>${b.promo_code}</span></div>` : ''}
       <div class="summary-row"><span class="label">Total Amount</span><span>₱${Number(b.total_amount).toLocaleString()}</span></div>
@@ -86,6 +106,55 @@ function confirmationEmail(b: BookingData) {
     A valid ID and your booking code above. Check-in time is from 2:00 PM onwards.</p>
 
     <p>We look forward to welcoming you! If you have any questions, feel free to contact us.</p>
+  `)
+}
+
+function checkedInEmail(b: BookingData) {
+  const n = nights(b)
+  return baseLayout(`
+    <h2>Welcome! You're Checked In 🛎️</h2>
+    <p>Hi <strong>${b.guest_name}</strong>, you have successfully checked in to <strong>${HOTEL_NAME}</strong>. We hope you have a wonderful stay!</p>
+
+    <div class="alert-blue">
+      <p style="margin:0;font-size:14px;color:#1e40af;">
+        <strong>Transaction Code:</strong> <span style="font-family:monospace;font-size:15px;">${b.transaction_code}</span>
+      </p>
+    </div>
+
+    <div class="summary">
+      <div class="summary-row"><span class="label">Room</span><span>${b.room_name}</span></div>
+      <div class="summary-row"><span class="label">Check-In</span><span>${formatDate(b.check_in)}</span></div>
+      <div class="summary-row"><span class="label">Check-Out</span><span>${formatDate(b.check_out)}</span></div>
+      <div class="summary-row"><span class="label">Duration</span><span>${n} night${n !== 1 ? 's' : ''}</span></div>
+      <div class="summary-row"><span class="label">Guests</span><span>${guestLine(b)}</span></div>
+      <div class="summary-row"><span class="label">Total Amount</span><span>₱${Number(b.total_amount).toLocaleString()}</span></div>
+    </div>
+
+    <p>🔑 Please keep your room key safe and return it at the front desk upon checkout.<br/>
+    Check-out time is at <strong>12:00 PM</strong>. Late checkout may be arranged with the front desk.</p>
+
+    <p>If you need anything during your stay, our staff is available 24/7. Enjoy your time with us! 🌟</p>
+  `)
+}
+
+function cancelledEmail(b: BookingData) {
+  return baseLayout(`
+    <h2>Booking Cancelled 😔</h2>
+    <p>Hi <strong>${b.guest_name}</strong>, your booking at <strong>${HOTEL_NAME}</strong> has been <span class="badge badge-cancelled">Cancelled</span>.</p>
+
+    <div class="alert-red">
+      <p style="margin:0 0 8px;font-size:13px;color:#991b1b;font-weight:600;">Cancelled Booking Details</p>
+      <p style="margin:0;font-size:13px;color:#7f1d1d;">
+        Code: <strong style="font-family:monospace;">${b.transaction_code}</strong><br/>
+        Room: ${b.room_name}<br/>
+        Check-In: ${formatDate(b.check_in)}<br/>
+        Check-Out: ${formatDate(b.check_out)}
+      </p>
+    </div>
+
+    <p>If you believe this is a mistake or would like to make a new booking, please contact us or visit our website.</p>
+
+    <p>We're sorry we couldn't accommodate you this time and hope to welcome you on a future occasion. 🙏</p>
   `)
 }
 
@@ -115,11 +184,7 @@ function checkoutEmail(b: BookingData, feedbackUrl: string) {
   `)
 }
 
-// ── Helpers ──────────────────────────────────────────────────────────────────
-
-function formatDate(d: string) {
-  return new Date(d).toLocaleDateString('en-PH', { weekday: 'short', year: 'numeric', month: 'long', day: 'numeric' })
-}
+// ── Types ─────────────────────────────────────────────────────────────────────
 
 interface BookingData {
   transaction_code: string
@@ -135,26 +200,31 @@ interface BookingData {
   promo_code?: string
 }
 
+type EmailType = 'confirmed' | 'checked_in' | 'checked_out' | 'cancelled'
+
+// ── Sender (Brevo SMTP API) ───────────────────────────────────────────────────
+
 async function sendEmail(to: string, subject: string, html: string) {
-  const res = await fetch('https://api.resend.com/emails', {
+  const credentials = btoa(`${BREVO_SMTP_LOGIN}:${BREVO_SMTP_PASSWORD}`)
+  const res = await fetch('https://api.brevo.com/v3/smtp/email', {
     method: 'POST',
     headers: {
-      'Authorization': `Bearer ${RESEND_API_KEY}`,
+      'api-key': BREVO_SMTP_PASSWORD,
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      from: `${HOTEL_NAME} <${HOTEL_EMAIL}>`,
-      to: [to],
+      sender: { name: HOTEL_NAME, email: BREVO_SMTP_LOGIN },
+      to: [{ email: to }],
       subject,
-      html,
+      htmlContent: html,
     }),
   })
   const data = await res.json()
-  if (!res.ok) throw new Error(data.message ?? 'Resend error')
+  if (!res.ok) throw new Error(data.message ?? JSON.stringify(data))
   return data
 }
 
-// ── Handler ──────────────────────────────────────────────────────────────────
+// ── Handler ───────────────────────────────────────────────────────────────────
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -162,7 +232,7 @@ serve(async (req) => {
   }
 
   try {
-    const { type, booking } = await req.json() as { type: 'confirmed' | 'checked_out', booking: BookingData }
+    const { type, booking } = await req.json() as { type: EmailType, booking: BookingData }
 
     if (!booking.guest_email) {
       return new Response(JSON.stringify({ skipped: 'no email on file' }), {
@@ -176,10 +246,16 @@ serve(async (req) => {
     if (type === 'confirmed') {
       subject = `✅ Booking Confirmed — ${booking.transaction_code} | ${HOTEL_NAME}`
       html    = confirmationEmail(booking)
+    } else if (type === 'checked_in') {
+      subject = `🛎️ You're Checked In — ${booking.transaction_code} | ${HOTEL_NAME}`
+      html    = checkedInEmail(booking)
     } else if (type === 'checked_out') {
       const feedbackUrl = `${APP_URL}/feedback?code=${booking.transaction_code}&name=${encodeURIComponent(booking.guest_name)}&email=${encodeURIComponent(booking.guest_email)}`
       subject = `Thank you for staying at ${HOTEL_NAME}! Leave us a review 🌟`
       html    = checkoutEmail(booking, feedbackUrl)
+    } else if (type === 'cancelled') {
+      subject = `❌ Booking Cancelled — ${booking.transaction_code} | ${HOTEL_NAME}`
+      html    = cancelledEmail(booking)
     } else {
       return new Response(JSON.stringify({ error: 'unknown type' }), { status: 400, headers: corsHeaders })
     }

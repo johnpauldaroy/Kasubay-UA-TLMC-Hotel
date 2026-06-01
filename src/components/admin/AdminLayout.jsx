@@ -4,7 +4,7 @@ import { useToast } from '@/hooks/use-toast'
 import { cn } from '@/lib/utils'
 import {
   LayoutDashboard, BedDouble, Users, CalendarDays,
-  DoorOpen, TrendingUp, Settings, LogOut, Menu,
+  DoorOpen, TrendingUp, Settings, LogOut, Menu, FileText,
 } from 'lucide-react'
 import { useState } from 'react'
 import { Button } from '@/components/ui/button'
@@ -18,6 +18,7 @@ const navItems = [
   { to: '/admin/bookings', label: 'Bookings',     icon: CalendarDays },
   { to: '/admin/walk-in',  label: 'Walk-In',      icon: DoorOpen },
   { to: '/admin/revenue',  label: 'Revenue',      icon: TrendingUp },
+  { to: '/admin/reports',  label: 'Reports',      icon: FileText },
   { to: '/admin/settings', label: 'Settings',     icon: Settings },
 ]
 
@@ -35,7 +36,7 @@ export default function AdminLayout() {
   }
 
   return (
-    <div className="flex h-screen bg-muted/30 overflow-hidden">
+    <div className="flex h-screen bg-muted/30 overflow-hidden print:h-auto print:bg-white print:overflow-visible">
       {/* Mobile overlay */}
       {sidebarOpen && (
         <div
@@ -47,7 +48,7 @@ export default function AdminLayout() {
       {/* Sidebar */}
       <aside
         className={cn(
-          'fixed inset-y-0 left-0 z-30 flex flex-col border-r border-slate-700 bg-slate-900 text-slate-100 shadow-sm transition-all duration-200 lg:static lg:translate-x-0',
+          'fixed inset-y-0 left-0 z-30 flex flex-col border-r border-slate-700 bg-slate-900 text-slate-100 shadow-sm transition-all duration-200 lg:static lg:translate-x-0 print:hidden',
           sidebarCollapsed ? 'w-20' : 'w-64',
           sidebarOpen ? 'translate-x-0' : '-translate-x-full'
         )}
@@ -127,14 +128,14 @@ export default function AdminLayout() {
       {/* Main content */}
       <div className="flex flex-1 flex-col overflow-hidden">
         {/* Top bar (mobile) */}
-        <header className="flex items-center gap-4 border-b bg-card px-4 py-3 lg:hidden">
+        <header className="flex items-center gap-4 border-b bg-card px-4 py-3 lg:hidden print:hidden">
           <Button variant="ghost" size="icon" onClick={() => setSidebarOpen(true)}>
             <Menu className="h-5 w-5" />
           </Button>
           <span className="font-semibold text-sm">Kasubay UA-TLMC Hotel Admin</span>
         </header>
 
-        <main className="flex-1 overflow-y-auto p-4 md:p-6">
+        <main className="flex-1 overflow-y-auto p-4 md:p-6 print:overflow-visible print:p-0">
           <Outlet />
         </main>
       </div>

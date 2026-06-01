@@ -256,7 +256,9 @@ function BookingWizard({ room, checkIn, checkOut, onClose }) {
             <CheckCircle2 className="h-10 w-10 text-green-600" />
           </div>
           <h3 className="text-xl font-bold text-green-700">Booking Confirmed!</h3>
-          <p className="text-muted-foreground text-sm mt-1">Your reservation is pending hotel confirmation.</p>
+          <p className="text-muted-foreground text-sm mt-1">
+            Your reservation is pending hotel confirmation and downpayment validation.
+          </p>
         </div>
 
         <div className="bg-primary/5 border border-primary/20 rounded-2xl p-4 text-center">
@@ -287,6 +289,9 @@ function BookingWizard({ room, checkIn, checkOut, onClose }) {
             <div className="flex justify-between">
               <span className="text-muted-foreground">Status</span>
               <Badge className="bg-amber-100 text-amber-800 border-amber-200 text-xs">Pending Confirmation</Badge>
+              <p className="text-xs text-amber-700 mt-1">
+                If downpayment is not received within 24 hours, this booking is automatically cancelled.
+              </p>
             </div>
           </CardContent>
         </Card>
@@ -547,7 +552,7 @@ function BookingWizard({ room, checkIn, checkOut, onClose }) {
             <span className="text-muted-foreground leading-relaxed">
               I agree to the hotel's{' '}
               <span className="text-primary font-medium">payment and cancellation policies</span>.
-              Booking is subject to hotel confirmation.
+              Booking is subject to hotel confirmation. Pending bookings without downpayment are automatically cancelled after 24 hours.
             </span>
           </label>
         </div>

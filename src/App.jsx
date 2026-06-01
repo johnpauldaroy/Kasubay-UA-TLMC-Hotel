@@ -15,6 +15,7 @@ import Bookings from '@/pages/admin/Bookings'
 import WalkIn from '@/pages/admin/WalkIn'
 import Revenue from '@/pages/admin/Revenue'
 import Settings from '@/pages/admin/Settings'
+import Reports from '@/pages/admin/Reports'
 
 const queryClient = new QueryClient()
 
@@ -49,6 +50,7 @@ export default function App() {
               <Route path="bookings" element={<Bookings />} />
               <Route path="walk-in" element={<WalkIn />} />
               <Route path="revenue" element={<Revenue />} />
+              <Route path="reports" element={<Reports />} />
               <Route path="settings" element={<Settings />} />
             </Route>
           </Routes>

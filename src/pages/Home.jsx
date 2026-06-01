@@ -1,15 +1,11 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Link } from 'react-router-dom'
 import { supabase } from '@/lib/supabase'
-import { useToast } from '@/hooks/use-toast'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Textarea } from '@/components/ui/textarea'
-import { Label } from '@/components/ui/label'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import {
-  Star, Phone, Mail, MapPin, MessageCircle,
+  Star, Phone, Mail, MapPin,
   ChevronLeft, ChevronRight, Wifi, Coffee, Car, Shield,
   Clock, Award, Users, BedDouble, ArrowRight, CheckCircle2,
 } from 'lucide-react'
@@ -22,6 +18,22 @@ function FacebookIcon({ className }) {
   )
 }
 
+function MessengerIcon({ className }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="currentColor">
+      <path d="M12 2C6.48 2 2 6.14 2 11.25c0 2.92 1.47 5.52 3.76 7.22V22l3.3-1.81c.88.24 1.8.36 2.94.36 5.52 0 10-4.14 10-9.25S17.52 2 12 2zm1.14 12.45-2.55-2.72-4.94 2.72 5.43-5.76 2.63 2.72 4.86-2.72-5.43 5.76z" />
+    </svg>
+  )
+}
+
+function normalizeExternalUrl(value) {
+  if (!value) return ''
+  const trimmed = value.trim()
+  if (!trimmed) return ''
+  if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) return trimmed
+  return `https://${trimmed}`
+}
+
 const heroImages = [
   '/image/hotel.jpg',
   '/image/hotel1.jpg',
@@ -30,31 +42,6 @@ const heroImages = [
   '/image/hotel4.jpg',
   '/image/hotel5.jpg',
 ]
-
-function StarRating({ value, onChange, readonly = false }) {
-  const [hovered, setHovered] = useState(0)
-  return (
-    <div className="flex gap-1">
-      {[1, 2, 3, 4, 5].map(n => (
-        <button
-          key={n}
-          type="button"
-          disabled={readonly}
-          onClick={() => !readonly && onChange?.(n)}
-          onMouseEnter={() => !readonly && setHovered(n)}
-          onMouseLeave={() => !readonly && setHovered(0)}
-          className={readonly ? 'cursor-default' : 'cursor-pointer transition-transform hover:scale-110'}
-        >
-          <Star
-            className={`h-6 w-6 transition-colors ${
-              n <= (hovered || value) ? 'fill-primary text-primary' : 'text-muted-foreground/40'
-            }`}
-          />
-        </button>
-      ))}
-    </div>
-  )
-}
 
 const AMENITY_HIGHLIGHTS = [
   { icon: Wifi,    label: 'Free WiFi',       desc: 'High-speed internet throughout' },
@@ -65,70 +52,15 @@ const AMENITY_HIGHLIGHTS = [
   { icon: Award,   label: 'Top Rated',       desc: 'Consistently highly reviewed' },
 ]
 
-function StatItem({ icon: Icon, label, target, suffix = '', decimals = 0, delay = 0, active }) {
-  const [localActive, setLocalActive] = useState(false)
-  const [count, setCount] = useState(0)
-
-  useEffect(() => {
-    if (!active) return
-    const t = setTimeout(() => setLocalActive(true), delay)
-    return () => clearTimeout(t)
-  }, [active, delay])
-
-  useEffect(() => {
-    if (!localActive) return
-    const duration = 1800
-    let start = null
-    const step = (ts) => {
-      if (!start) start = ts
-      const progress = Math.min((ts - start) / duration, 1)
-      const eased = 1 - Math.pow(1 - progress, 3)
-      setCount(parseFloat((eased * target).toFixed(decimals)))
-      if (progress < 1) requestAnimationFrame(step)
-    }
-    requestAnimationFrame(step)
-  }, [localActive, target, decimals])
-
-  return (
-    <div className={`flex flex-col items-center py-8 px-4 text-center transition-all duration-700 ${
-      active ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'
-    }`} style={{ transitionDelay: `${delay}ms` }}>
-      <div className={`mb-3 transition-transform duration-500 ${active ? 'scale-100' : 'scale-75'}`}
-        style={{ transitionDelay: `${delay + 200}ms` }}>
-        <Icon className="h-6 w-6 text-white/70" />
-      </div>
-      <p className="text-3xl md:text-4xl font-bold text-white tabular-nums">
-        {decimals > 0 ? count.toFixed(decimals) : count.toLocaleString()}{suffix}
-      </p>
-      <p className="text-xs text-white/70 mt-1 font-medium uppercase tracking-wider">{label}</p>
-    </div>
-  )
-}
-
-function StatsBar({ avgRating, statsRef, statsVisible }) {
-  return (
-    <section ref={statsRef} className="bg-primary overflow-hidden">
-      <div className="max-w-5xl mx-auto grid grid-cols-2 md:grid-cols-4 divide-x divide-white/20">
-        <StatItem icon={Users}     label="Happy Guests"    target={1200} suffix="+"  delay={0}   active={statsVisible} />
-        <StatItem icon={BedDouble} label="Room Types"      target={4}    suffix=""   delay={150} active={statsVisible} />
-        <StatItem icon={Award}     label="Years of Service" target={10}  suffix="+"  delay={300} active={statsVisible} />
-        <StatItem icon={Star}      label="Average Rating"  target={parseFloat(avgRating)} suffix=" ★" decimals={1} delay={450} active={statsVisible} />
-      </div>
-    </section>
-  )
-}
 
 export default function Home() {
   const [slide, setSlide] = useState(0)
   const [settings, setSettings] = useState({})
+  const [rooms, setRooms] = useState([])
   const [feedbacks, setFeedbacks] = useState([])
   const [feedbackSlide, setFeedbackSlide] = useState(0)
-  const [form, setForm] = useState({ name: '', email: '', message: '', rating: 5 })
-  const [submitting, setSubmitting] = useState(false)
   const [navScrolled, setNavScrolled] = useState(false)
-  const [statsVisible, setStatsVisible] = useState(false)
-  const statsRef = useRef(null)
-  const { toast } = useToast()
+
   const heroTimerRef = useRef(null)
 
   // Count-up animation hook
@@ -161,18 +93,13 @@ export default function Home() {
     return () => window.removeEventListener('scroll', onScroll)
   }, [])
 
-  useEffect(() => {
-    const observer = new IntersectionObserver(
-      ([entry]) => { if (entry.isIntersecting) setStatsVisible(true) },
-      { threshold: 0.3 }
-    )
-    if (statsRef.current) observer.observe(statsRef.current)
-    return () => observer.disconnect()
-  }, [])
 
   useEffect(() => {
     supabase.from('settings').select('*').single().then(({ data }) => {
       if (data) setSettings(data)
+    })
+    supabase.from('rooms').select('*').eq('is_active', true).order('created_at').then(({ data }) => {
+      if (data) setRooms(data)
     })
     supabase.from('feedbacks').select('*').order('created_at', { ascending: false }).limit(9).then(({ data }) => {
       if (data) setFeedbacks(data)
@@ -185,22 +112,6 @@ export default function Home() {
     heroTimerRef.current = setInterval(() => setSlide(s => (s + 1) % heroImages.length), 5000)
   }
 
-  async function handleFeedback(e) {
-    e.preventDefault()
-    setSubmitting(true)
-    const { error } = await supabase.from('feedbacks').insert([form])
-    setSubmitting(false)
-    if (error) {
-      toast({ title: 'Error', description: error.message, variant: 'destructive' })
-    } else {
-      toast({ title: 'Thank you!', description: 'Your feedback has been submitted.' })
-      setForm({ name: '', email: '', message: '', rating: 5 })
-      supabase.from('feedbacks').select('*').order('created_at', { ascending: false }).limit(9).then(({ data }) => {
-        if (data) setFeedbacks(data)
-      })
-    }
-  }
-
   const avgRating = feedbacks.length
     ? (feedbacks.reduce((s, f) => s + (f.rating || 0), 0) / feedbacks.length).toFixed(1)
     : '5.0'
@@ -209,6 +120,8 @@ export default function Home() {
   for (let i = 0; i < feedbacks.length; i += 3) feedbackGroups.push(feedbacks.slice(i, i + 3))
 
   const hotelName = settings.hotel_name || 'Kasubay UA-TLMC Hotel'
+  const facebookUrl = normalizeExternalUrl(settings.facebook_url)
+  const messengerUrl = normalizeExternalUrl(settings.messenger_url)
 
   return (
     <div className="min-h-screen bg-background">
@@ -341,9 +254,6 @@ export default function Home() {
         </div>
       </section>
 
-      {/* ── Stats bar ── */}
-      <StatsBar avgRating={avgRating} statsRef={statsRef} statsVisible={statsVisible} />
-
       {/* ── Room Previews ── */}
       <section id="rooms" className="py-20 px-4 bg-background">
         <div className="max-w-7xl mx-auto">
@@ -355,44 +265,48 @@ export default function Home() {
             </p>
           </div>
           <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-6">
-            {[
-              { name: 'Single Bed',  price: '₱1,299',  img: heroImages[0], badge: 'Best Value',  desc: 'Cozy room perfect for solo travelers.' },
-              { name: 'Double Bed',  price: '₱1,799',  img: heroImages[1], badge: 'Popular',     desc: 'Spacious room ideal for couples.' },
-              { name: 'Triple Bed',  price: '₱2,499',  img: heroImages[2], badge: 'Family Pick', desc: 'Fits families and small groups.' },
-              { name: 'Event Hall',  price: '₱15,000', img: heroImages[3], badge: 'Premium',     desc: 'Perfect for events and celebrations.' },
-            ].map(({ name, price, img, badge, desc }) => (
-              <Card key={name} className="overflow-hidden group hover:shadow-xl transition-all duration-300 hover:-translate-y-1 border border-border/60">
-                <div className="relative overflow-hidden h-52">
-                  <img src={img} alt={name} className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-110" />
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
-                  <span className="absolute top-3 left-3 text-xs font-bold bg-primary text-white px-2.5 py-1 rounded-full">
-                    {badge}
-                  </span>
-                  <div className="absolute bottom-3 left-3 right-3">
-                    <p className="text-white font-bold text-base">{name}</p>
-                    <p className="text-white/80 text-xs">{desc}</p>
-                  </div>
-                </div>
-                <CardContent className="p-4">
-                  <div className="flex items-center justify-between mb-3">
-                    <div>
-                      <span className="text-xl font-bold text-primary">{price}</span>
-                      <span className="text-xs text-muted-foreground ml-1">/night</span>
-                    </div>
-                    <div className="flex items-center gap-1 text-xs text-amber-500">
-                      <Star className="h-3.5 w-3.5 fill-amber-400 text-amber-400" />
-                      <span className="font-medium">4.8</span>
+            {rooms.map((room, i) => {
+              const img = room.images?.[0] || heroImages[i % heroImages.length]
+              const price = `₱${Number(room.price).toLocaleString()}`
+              return (
+                <Card key={room.id} className="overflow-hidden group hover:shadow-xl transition-all duration-300 hover:-translate-y-1 border border-border/60">
+                  <div className="relative overflow-hidden h-52">
+                    <img src={img} alt={room.name} className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-110" />
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
+                    {room.tag && (
+                      <span className="absolute top-3 left-3 text-xs font-bold bg-primary text-white px-2.5 py-1 rounded-full capitalize">
+                        {room.tag}
+                      </span>
+                    )}
+                    <div className="absolute bottom-3 left-3 right-3">
+                      <p className="text-white font-bold text-base">{room.name}</p>
+                      <p className="text-white/80 text-xs">{room.description}</p>
                     </div>
                   </div>
-                  <Link to="/booking">
-                    <Button size="sm" className="w-full group/btn">
-                      Book Now
-                      <ArrowRight className="h-3.5 w-3.5 ml-1 group-hover/btn:translate-x-1 transition-transform" />
-                    </Button>
-                  </Link>
-                </CardContent>
-              </Card>
-            ))}
+                  <CardContent className="p-4">
+                    <div className="flex items-center justify-between mb-3">
+                      <div>
+                        <span className="text-xl font-bold text-primary">{price}</span>
+                        <span className="text-xs text-muted-foreground ml-1">/night</span>
+                      </div>
+                      <div className="flex items-center gap-1 text-xs text-amber-500">
+                        <Star className="h-3.5 w-3.5 fill-amber-400 text-amber-400" />
+                        <span className="font-medium">{avgRating}</span>
+                      </div>
+                    </div>
+                    <Link to="/booking">
+                      <Button size="sm" className="w-full group/btn">
+                        Book Now
+                        <ArrowRight className="h-3.5 w-3.5 ml-1 group-hover/btn:translate-x-1 transition-transform" />
+                      </Button>
+                    </Link>
+                  </CardContent>
+                </Card>
+              )
+            })}
+            {rooms.length === 0 && (
+              <p className="col-span-4 text-center text-muted-foreground py-10 text-sm">No rooms available at the moment.</p>
+            )}
           </div>
           <div className="text-center mt-10">
             <Link to="/booking">
@@ -547,59 +461,6 @@ export default function Home() {
         </section>
       )}
 
-      {/* ── Leave Feedback ── */}
-      <section className="py-20 px-4 bg-background">
-        <div className="max-w-2xl mx-auto">
-          <div className="text-center mb-10">
-            <Badge variant="outline" className="mb-3 text-primary border-primary/30 bg-primary/5">Feedback</Badge>
-            <h2 className="text-3xl md:text-4xl font-bold mb-2">Share Your Experience</h2>
-            <p className="text-muted-foreground text-sm">We genuinely value every guest's feedback.</p>
-          </div>
-          <Card className="p-6 md:p-8 border border-border/60 shadow-sm">
-            <form onSubmit={handleFeedback} className="space-y-5">
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-1.5">
-                  <Label className="text-sm font-medium">Full Name <span className="text-destructive">*</span></Label>
-                  <Input
-                    placeholder="Juan dela Cruz"
-                    value={form.name}
-                    onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
-                    required
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <Label className="text-sm font-medium">Email <span className="text-muted-foreground text-xs">(optional)</span></Label>
-                  <Input
-                    type="email"
-                    placeholder="juan@example.com"
-                    value={form.email}
-                    onChange={e => setForm(f => ({ ...f, email: e.target.value }))}
-                  />
-                </div>
-              </div>
-              <div className="space-y-1.5">
-                <Label className="text-sm font-medium">Your Rating</Label>
-                <StarRating value={form.rating} onChange={r => setForm(f => ({ ...f, rating: r }))} />
-              </div>
-              <div className="space-y-1.5">
-                <Label className="text-sm font-medium">Message <span className="text-destructive">*</span></Label>
-                <Textarea
-                  rows={4}
-                  placeholder="Tell us about your stay…"
-                  value={form.message}
-                  onChange={e => setForm(f => ({ ...f, message: e.target.value }))}
-                  required
-                  className="resize-none"
-                />
-              </div>
-              <Button type="submit" className="w-full font-semibold h-11" disabled={submitting}>
-                {submitting ? 'Submitting…' : 'Submit Feedback'}
-              </Button>
-            </form>
-          </Card>
-        </div>
-      </section>
-
       {/* ── Footer ── */}
       <footer className="bg-slate-900 text-white pt-14 pb-6 px-4">
         <div className="max-w-7xl mx-auto grid md:grid-cols-4 gap-10 mb-10">
@@ -616,16 +477,16 @@ export default function Home() {
               Your perfect stay awaits. Experience comfort and hospitality at its finest.
             </p>
             <div className="flex gap-2">
-              {settings.facebook_url && (
-                <a href={settings.facebook_url} target="_blank" rel="noreferrer"
+              {facebookUrl && (
+                <a href={facebookUrl} target="_blank" rel="noreferrer"
                   className="flex h-9 w-9 items-center justify-center rounded-lg bg-white/10 hover:bg-primary transition-colors">
                   <FacebookIcon className="h-4 w-4" />
                 </a>
               )}
-              {settings.messenger_url && (
-                <a href={settings.messenger_url} target="_blank" rel="noreferrer"
+              {messengerUrl && (
+                <a href={messengerUrl} target="_blank" rel="noreferrer"
                   className="flex h-9 w-9 items-center justify-center rounded-lg bg-white/10 hover:bg-primary transition-colors">
-                  <MessageCircle className="h-4 w-4" />
+                  <MessengerIcon className="h-4 w-4" />
                 </a>
               )}
             </div>
@@ -688,22 +549,34 @@ export default function Home() {
       </footer>
 
       {/* ── Floating social buttons ── */}
-      <div className="fixed bottom-6 right-6 flex flex-col gap-2.5 z-40">
-        {settings.messenger_url && (
-          <a href={settings.messenger_url} target="_blank" rel="noreferrer"
-            className="flex h-12 w-12 items-center justify-center rounded-full bg-primary shadow-lg hover:scale-110 hover:shadow-xl transition-all"
-            title="Message us">
-            <MessageCircle className="h-5 w-5 text-white" />
-          </a>
-        )}
-        {settings.facebook_url && (
-          <a href={settings.facebook_url} target="_blank" rel="noreferrer"
-            className="flex h-12 w-12 items-center justify-center rounded-full bg-blue-600 shadow-lg hover:scale-110 hover:shadow-xl transition-all"
-            title="Facebook">
-            <FacebookIcon className="h-5 w-5 text-white" />
-          </a>
-        )}
-      </div>
+      {(messengerUrl || facebookUrl) && (
+        <div className="fixed right-0 top-1/2 -translate-y-1/2 z-40 bg-slate-900/95 backdrop-blur-sm px-4 py-5 rounded-l-2xl shadow-2xl border border-white/10 border-r-0">
+          <div className="flex flex-col items-center gap-3">
+            {messengerUrl && (
+              <a
+                href={messengerUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="flex h-14 w-14 items-center justify-center rounded-full bg-[#1a7cff] shadow-lg hover:scale-105 transition-transform"
+                title="Message us"
+              >
+                <MessengerIcon className="h-7 w-7 text-white" />
+              </a>
+            )}
+            {facebookUrl && (
+              <a
+                href={facebookUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="flex h-14 w-14 items-center justify-center rounded-full bg-[#1877f2] shadow-lg hover:scale-105 transition-transform"
+                title="Facebook"
+              >
+                <FacebookIcon className="h-7 w-7 text-white" />
+              </a>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   )
 }

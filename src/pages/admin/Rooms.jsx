@@ -10,7 +10,9 @@ import { Badge } from '@/components/ui/badge'
 import { Card, CardContent } from '@/components/ui/card'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { Plus, Pencil, Trash2, BedDouble, X } from 'lucide-react'
+import { Plus, Pencil, Trash2, BedDouble, X, Upload, Loader2 } from 'lucide-react'
+
+const BUCKET = 'room-images'
 
 const emptyRoom = { name: '', tag: 'single', price: '', capacity: 1, max_guests: 2, quantity: 1, description: '', amenities: [], images: [], is_active: true }
 
@@ -20,7 +22,7 @@ export default function Rooms() {
   const [editing, setEditing] = useState(null)
   const [form, setForm] = useState(emptyRoom)
   const [amenityInput, setAmenityInput] = useState('')
-  const [imageInput, setImageInput] = useState('')
+  const [uploading, setUploading] = useState(false)
   const [loading, setLoading] = useState(false)
   const { toast } = useToast()
 
@@ -35,7 +37,6 @@ export default function Rooms() {
     setEditing(null)
     setForm(emptyRoom)
     setAmenityInput('')
-    setImageInput('')
     setOpen(true)
   }
 
@@ -43,8 +44,34 @@ export default function Rooms() {
     setEditing(room)
     setForm({ ...room })
     setAmenityInput('')
-    setImageInput('')
     setOpen(true)
+  }
+
+  async function handleImageUpload(e) {
+    const files = Array.from(e.target.files)
+    if (!files.length) return
+    setUploading(true)
+    const uploaded = []
+    for (const file of files) {
+      const ext = file.name.split('.').pop()
+      const path = `${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`
+      const { error } = await supabase.storage.from(BUCKET).upload(path, file, { upsert: false })
+      if (error) {
+        toast({ title: 'Upload failed', description: error.message, variant: 'destructive' })
+      } else {
+        const { data } = supabase.storage.from(BUCKET).getPublicUrl(path)
+        uploaded.push(data.publicUrl)
+      }
+    }
+    setForm(f => ({ ...f, images: [...f.images, ...uploaded] }))
+    setUploading(false)
+    e.target.value = ''
+  }
+
+  async function handleImageDelete(url, idx) {
+    const path = url.split(`/${BUCKET}/`)[1]
+    if (path) await supabase.storage.from(BUCKET).remove([path])
+    setForm(f => ({ ...f, images: f.images.filter((_, i) => i !== idx) }))
   }
 
   async function handleSave() {
@@ -87,12 +114,6 @@ export default function Rooms() {
     }
   }
 
-  function addImage() {
-    if (imageInput.trim()) {
-      setForm(f => ({ ...f, images: [...f.images, imageInput.trim()] }))
-      setImageInput('')
-    }
-  }
 
   return (
     <div className="space-y-6">
@@ -227,23 +248,36 @@ export default function Rooms() {
               </div>
             </div>
             <div className="space-y-2">
-              <Label>Image URLs</Label>
-              <div className="flex gap-2">
-                <Input placeholder="https://..." value={imageInput} onChange={e => setImageInput(e.target.value)}
-                  onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), addImage())} />
-                <Button type="button" variant="outline" onClick={addImage}>Add</Button>
-              </div>
-              <div className="flex flex-wrap gap-2 mt-2">
-                {form.images.map((img, i) => (
-                  <div key={i} className="relative">
-                    <img src={img} alt="" className="h-16 w-20 object-cover rounded" />
-                    <button className="absolute -top-1 -right-1 bg-destructive text-white rounded-full h-4 w-4 flex items-center justify-center"
-                      onClick={() => setForm(f => ({ ...f, images: f.images.filter((_, j) => j !== i) }))}>
-                      <X className="h-2.5 w-2.5" />
-                    </button>
-                  </div>
-                ))}
-              </div>
+              <Label>Room Photos</Label>
+              <label className={`flex items-center justify-center gap-2 w-full border-2 border-dashed rounded-lg px-4 py-5 cursor-pointer transition-colors ${uploading ? 'opacity-60 pointer-events-none' : 'hover:border-primary hover:bg-primary/5'}`}>
+                {uploading
+                  ? <><Loader2 className="h-4 w-4 animate-spin" /><span className="text-sm text-muted-foreground">Uploading…</span></>
+                  : <><Upload className="h-4 w-4 text-muted-foreground" /><span className="text-sm text-muted-foreground">Click to upload photos (JPG, PNG, WEBP)</span></>
+                }
+                <input
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  className="hidden"
+                  onChange={handleImageUpload}
+                />
+              </label>
+              {form.images.length > 0 && (
+                <div className="flex flex-wrap gap-2 mt-2">
+                  {form.images.map((img, i) => (
+                    <div key={i} className="relative group">
+                      <img src={img} alt="" className="h-20 w-24 object-cover rounded-lg border" />
+                      <button
+                        type="button"
+                        className="absolute -top-1.5 -right-1.5 bg-destructive text-white rounded-full h-5 w-5 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity shadow"
+                        onClick={() => handleImageDelete(img, i)}
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
           <DialogFooter>

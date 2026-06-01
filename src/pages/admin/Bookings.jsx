@@ -14,7 +14,8 @@ import { format } from 'date-fns'
 
 const STATUSES = ['Pending', 'Confirmed', 'Checked In', 'Checked Out', 'Cancelled']
 
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL
+const SUPABASE_URL      = import.meta.env.VITE_SUPABASE_URL
+const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY
 
 // Calls the Supabase Edge Function to send transactional email
 async function triggerEmail(type, booking) {
@@ -22,7 +23,11 @@ async function triggerEmail(type, booking) {
   try {
     const res = await fetch(`${SUPABASE_URL}/functions/v1/send-email`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+        'apikey': SUPABASE_ANON_KEY,
+      },
       body: JSON.stringify({ type, booking }),
     })
     const data = await res.json()
@@ -82,25 +87,22 @@ export default function Bookings() {
     toast({ title: 'Status updated', description: `Booking marked as ${editStatus}` })
 
     // Send email notifications on key status transitions
-    if (editStatus === 'Confirmed' && selected.guest_email) {
-      setEmailSending(true)
-      const result = await triggerEmail('confirmed', { ...selected, status: editStatus })
-      setEmailSending(false)
-      if (result?.ok) {
-        toast({ title: '📧 Confirmation email sent', description: `Sent to ${selected.guest_email}` })
-      } else if (result?.skipped) {
-        toast({ title: 'No email on file', description: 'Guest did not provide an email address.' })
-      } else if (result?.error) {
-        toast({ title: 'Email failed to send', description: result.error, variant: 'destructive' })
-      }
+    const emailMap = {
+      'Confirmed':   { type: 'confirmed',   label: '✅ Confirmation email sent' },
+      'Checked In':  { type: 'checked_in',  label: '🛎️ Check-in email sent' },
+      'Checked Out': { type: 'checked_out', label: '📧 Checkout & feedback email sent' },
+      'Cancelled':   { type: 'cancelled',   label: '❌ Cancellation email sent' },
     }
 
-    if (editStatus === 'Checked Out' && selected.guest_email) {
+    const emailEntry = emailMap[editStatus]
+    if (emailEntry && selected.guest_email) {
       setEmailSending(true)
-      const result = await triggerEmail('checked_out', { ...selected, status: editStatus })
+      const result = await triggerEmail(emailEntry.type, { ...selected, status: editStatus })
       setEmailSending(false)
       if (result?.ok) {
-        toast({ title: '📧 Checkout & feedback email sent', description: `Sent to ${selected.guest_email}` })
+        toast({ title: emailEntry.label, description: `Sent to ${selected.guest_email}` })
+      } else if (result?.skipped) {
+        toast({ title: 'No email on file', description: 'Guest did not provide an email address.' })
       } else if (result?.error) {
         toast({ title: 'Email failed to send', description: result.error, variant: 'destructive' })
       }
@@ -263,27 +265,19 @@ export default function Bookings() {
                 {/* Email quick-actions */}
                 {selected.guest_email && (
                   <div className="border border-border/60 rounded-xl p-3 space-y-2">
-                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Email Actions</p>
-                    <div className="flex gap-2 flex-wrap">
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="flex-1 gap-1.5 text-xs"
-                        disabled={emailSending}
-                        onClick={() => resendEmail('confirmed')}
-                      >
-                        <CheckCircle2 className="h-3.5 w-3.5 text-green-600" />
-                        Resend Confirmation
+                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Resend Email</p>
+                    <div className="grid grid-cols-2 gap-2">
+                      <Button size="sm" variant="outline" className="gap-1.5 text-xs" disabled={emailSending} onClick={() => resendEmail('confirmed')}>
+                        <CheckCircle2 className="h-3.5 w-3.5 text-green-600" /> Confirmation
                       </Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="flex-1 gap-1.5 text-xs"
-                        disabled={emailSending}
-                        onClick={() => resendEmail('checked_out')}
-                      >
-                        <LogOut className="h-3.5 w-3.5 text-blue-600" />
-                        Send Feedback Request
+                      <Button size="sm" variant="outline" className="gap-1.5 text-xs" disabled={emailSending} onClick={() => resendEmail('checked_in')}>
+                        <Mail className="h-3.5 w-3.5 text-blue-500" /> Check-In
+                      </Button>
+                      <Button size="sm" variant="outline" className="gap-1.5 text-xs" disabled={emailSending} onClick={() => resendEmail('checked_out')}>
+                        <LogOut className="h-3.5 w-3.5 text-blue-600" /> Check-Out
+                      </Button>
+                      <Button size="sm" variant="outline" className="gap-1.5 text-xs" disabled={emailSending} onClick={() => resendEmail('cancelled')}>
+                        <Mail className="h-3.5 w-3.5 text-red-500" /> Cancellation
                       </Button>
                     </div>
                     <p className="text-xs text-muted-foreground">Sending to: {selected.guest_email}</p>
@@ -299,16 +293,20 @@ export default function Bookings() {
                       {STATUSES.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
                     </SelectContent>
                   </Select>
-                  {editStatus === 'Confirmed' && selected.guest_email && (
-                    <p className="text-xs text-green-700 flex items-center gap-1">
-                      <Mail className="h-3 w-3" /> A confirmation email will be sent to {selected.guest_email}
-                    </p>
-                  )}
-                  {editStatus === 'Checked Out' && selected.guest_email && (
-                    <p className="text-xs text-blue-700 flex items-center gap-1">
-                      <Mail className="h-3 w-3" /> A checkout + feedback email will be sent to {selected.guest_email}
-                    </p>
-                  )}
+                  {selected.guest_email && editStatus !== selected.status && (() => {
+                    const hints = {
+                      'Confirmed':   { color: 'text-green-700', msg: 'A confirmation email will be sent.' },
+                      'Checked In':  { color: 'text-blue-700',  msg: 'A check-in welcome email will be sent.' },
+                      'Checked Out': { color: 'text-blue-700',  msg: 'A checkout + feedback request email will be sent.' },
+                      'Cancelled':   { color: 'text-red-600',   msg: 'A cancellation notice email will be sent.' },
+                    }
+                    const h = hints[editStatus]
+                    return h ? (
+                      <p className={`text-xs flex items-center gap-1 ${h.color}`}>
+                        <Mail className="h-3 w-3" /> {h.msg}
+                      </p>
+                    ) : null
+                  })()}
                   {!selected.guest_email && (
                     <p className="text-xs text-muted-foreground flex items-center gap-1">
                       <Mail className="h-3 w-3" /> No email on file — notifications skipped

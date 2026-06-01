@@ -14,3 +14,22 @@ The React Compiler is not enabled on this template because of its impact on dev 
 ## Expanding the ESLint configuration
 
 If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+
+## Auto-cancel pending bookings after 24 hours
+
+To automatically cancel online bookings that remain `Pending` for 24 hours (no downpayment), run this SQL file in your Supabase SQL Editor:
+
+`supabase/auto-cancel-pending-bookings.sql`
+
+What it does:
+- Creates `public.auto_cancel_pending_bookings_no_downpayment()`
+- Enables `pg_cron` (if not already enabled)
+- Schedules cron job `auto-cancel-pending-bookings-24h` every 30 minutes
+
+You can verify the job with:
+
+```sql
+select jobid, jobname, schedule, active
+from cron.job
+where jobname = 'auto-cancel-pending-bookings-24h';
+```
