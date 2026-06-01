@@ -43,6 +43,13 @@ const heroImages = [
   '/image/hotel5.jpg',
 ]
 
+const aboutImages = [
+  '/image/hotel.jpg',
+  '/hotel/12.jpg',
+  '/image/hotel2.jpg',
+  '/image/hotel3.jpg',
+]
+
 const AMENITY_HIGHLIGHTS = [
   { icon: Wifi,    label: 'Free WiFi',       desc: 'High-speed internet throughout' },
   { icon: Coffee,  label: 'Breakfast',       desc: 'Complimentary morning meal' },
@@ -387,7 +394,7 @@ export default function Home() {
               </div>
             </div>
             <div className="grid grid-cols-2 gap-3">
-              {heroImages.slice(0, 4).map((src, i) => (
+              {aboutImages.map((src, i) => (
                 <img
                   key={i}
                   src={src}
