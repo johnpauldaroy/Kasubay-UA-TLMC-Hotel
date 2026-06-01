@@ -17,10 +17,7 @@ const ROOM_TYPES = [
   { value: 'single',    label: 'Single' },
   { value: 'double',    label: 'Double' },
   { value: 'triple',    label: 'Triple' },
-  { value: 'quad',      label: 'Quad' },
-  { value: 'suite',     label: 'Suite' },
   { value: 'event',     label: 'Event Hall' },
-  { value: 'other',     label: 'Other' },
 ]
 
 const BUCKET = 'room-images'
