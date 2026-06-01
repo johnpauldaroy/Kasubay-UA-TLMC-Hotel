@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react'
 import * as XLSX from 'xlsx'
+import jsPDF from 'jspdf'
+import autoTable from 'jspdf-autotable'
 import { supabase } from '@/lib/supabase'
 import { formatCurrency, calculateRetentionMetrics } from '@/lib/utils'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -8,7 +10,7 @@ import { Button } from '@/components/ui/button'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { TrendingUp, TrendingDown, DollarSign, CreditCard, Repeat, Percent, XCircle, Download, FileText, FileSpreadsheet } from 'lucide-react'
+import { TrendingUp, TrendingDown, DollarSign, CreditCard, Repeat, Percent, XCircle, Download, FileText, FileSpreadsheet, FileDown } from 'lucide-react'
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell,
@@ -108,6 +110,90 @@ export default function Revenue() {
     ]
   }
 
+  function exportPDF() {
+    const doc = new jsPDF()
+    const gold = [200, 155, 42]
+
+    // Header
+    doc.setFillColor(...gold)
+    doc.rect(0, 0, 210, 22, 'F')
+    doc.setTextColor(255, 255, 255)
+    doc.setFontSize(14)
+    doc.setFont('helvetica', 'bold')
+    doc.text('Kasubay UA-TLMC Hotel', 14, 10)
+    doc.setFontSize(9)
+    doc.setFont('helvetica', 'normal')
+    doc.text(`Revenue & Income Report — ${periodLabel}`, 14, 17)
+    doc.setTextColor(150, 150, 150)
+    doc.text(`Generated: ${format(new Date(), 'yyyy-MM-dd HH:mm')}`, 196, 17, { align: 'right' })
+
+    // Summary metrics
+    doc.setTextColor(30, 41, 59)
+    doc.setFontSize(11)
+    doc.setFont('helvetica', 'bold')
+    doc.text('Summary', 14, 32)
+    autoTable(doc, {
+      startY: 36,
+      head: [['Metric', 'Value']],
+      body: buildSummaryRows().map(r => [r.Metric, String(r.Value)]),
+      styles: { fontSize: 9 },
+      headStyles: { fillColor: gold, textColor: 255 },
+      alternateRowStyles: { fillColor: [250, 250, 250] },
+      margin: { left: 14, right: 14 },
+    })
+
+    // Monthly revenue
+    doc.setFontSize(11)
+    doc.setFont('helvetica', 'bold')
+    doc.text('Monthly Revenue (Last 6 Months)', 14, doc.lastAutoTable.finalY + 12)
+    autoTable(doc, {
+      startY: doc.lastAutoTable.finalY + 16,
+      head: [['Month', 'Revenue (₱)']],
+      body: monthly.map(r => [r.name, Number(r.total).toLocaleString()]),
+      styles: { fontSize: 9 },
+      headStyles: { fillColor: gold, textColor: 255 },
+      alternateRowStyles: { fillColor: [250, 250, 250] },
+      margin: { left: 14, right: 14 },
+    })
+
+    // Revenue by room
+    doc.setFontSize(11)
+    doc.setFont('helvetica', 'bold')
+    doc.text('Revenue by Room', 14, doc.lastAutoTable.finalY + 12)
+    autoTable(doc, {
+      startY: doc.lastAutoTable.finalY + 16,
+      head: [['Room', 'Revenue (₱)']],
+      body: byRoom.map(r => [r.name || 'Unknown', Number(r.value).toLocaleString()]),
+      styles: { fontSize: 9 },
+      headStyles: { fillColor: gold, textColor: 255 },
+      alternateRowStyles: { fillColor: [250, 250, 250] },
+      margin: { left: 14, right: 14 },
+    })
+
+    // Transactions — new page
+    doc.addPage()
+    doc.setFillColor(...gold)
+    doc.rect(0, 0, 210, 14, 'F')
+    doc.setTextColor(255, 255, 255)
+    doc.setFontSize(11)
+    doc.setFont('helvetica', 'bold')
+    doc.text('Transactions', 14, 10)
+    autoTable(doc, {
+      startY: 18,
+      head: [['Date', 'Code', 'Guest', 'Room', 'Payment', 'Amount (₱)', 'Status']],
+      body: buildTransactionRows().map(r => [
+        r.Date, r['Transaction Code'], r['Guest Name'],
+        r.Room, r['Payment Method'], Number(r.Amount).toLocaleString(), r.Status,
+      ]),
+      styles: { fontSize: 8 },
+      headStyles: { fillColor: gold, textColor: 255 },
+      alternateRowStyles: { fillColor: [250, 250, 250] },
+      margin: { left: 14, right: 14 },
+    })
+
+    doc.save(`${exportFileName}.pdf`)
+  }
+
   function exportCSV() {
     const ws = XLSX.utils.json_to_sheet(buildTransactionRows())
     const csv = XLSX.utils.sheet_to_csv(ws)
@@ -165,6 +251,10 @@ export default function Revenue() {
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={exportPDF} className="gap-2 cursor-pointer">
+                <FileDown className="h-4 w-4 text-red-500" />
+                Export as PDF (.pdf)
+              </DropdownMenuItem>
               <DropdownMenuItem onClick={exportExcel} className="gap-2 cursor-pointer">
                 <FileSpreadsheet className="h-4 w-4 text-green-600" />
                 Export as Excel (.xlsx)

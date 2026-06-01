@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import { format, addMonths, startOfMonth } from 'date-fns'
 import * as XLSX from 'xlsx'
+import jsPDF from 'jspdf'
+import autoTable from 'jspdf-autotable'
 import { supabase } from '@/lib/supabase'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -8,7 +10,7 @@ import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
-import { BedDouble, MessageSquareText, Printer, Star, Users, Download, FileText, FileSpreadsheet } from 'lucide-react'
+import { BedDouble, MessageSquareText, Printer, Star, Users, Download, FileText, FileSpreadsheet, FileDown } from 'lucide-react'
 
 const STOPWORDS = new Set([
   'a','an','and','are','as','at','be','been','but','by','can','could','did','do','does','for','from','had','has','have','he','her','hers','him','his','how','i','if','in','into','is','it','its','just','me','more','my','no','not','of','on','or','our','ours','out','please','really','so','than','that','the','their','theirs','them','then','there','they','this','to','too','us','very','was','we','were','what','when','where','which','who','will','with','you','your','yours',
@@ -157,6 +159,85 @@ export default function Reports() {
     return { bookingRows, feedbackRows }
   }
 
+  function exportPDF() {
+    const doc = new jsPDF()
+    const gold = [200, 155, 42]
+
+    // Header
+    doc.setFillColor(...gold)
+    doc.rect(0, 0, 210, 22, 'F')
+    doc.setTextColor(255, 255, 255)
+    doc.setFontSize(14)
+    doc.setFont('helvetica', 'bold')
+    doc.text('Kasubay UA-TLMC Hotel', 14, 10)
+    doc.setFontSize(9)
+    doc.setFont('helvetica', 'normal')
+    doc.text(`Monthly Report — ${monthLabel}`, 14, 17)
+    doc.setTextColor(150, 150, 150)
+    doc.text(`Generated: ${format(new Date(), 'yyyy-MM-dd HH:mm')}`, 196, 17, { align: 'right' })
+
+    // Summary
+    doc.setTextColor(30, 41, 59)
+    doc.setFontSize(11)
+    doc.setFont('helvetica', 'bold')
+    doc.text('Summary', 14, 32)
+    autoTable(doc, {
+      startY: 36,
+      head: [['Metric', 'Value']],
+      body: [
+        ['Month', monthLabel],
+        ['Checked-out Stays', bookings.length],
+        ['Unique Guests', guestKeys.size],
+        ['Total Guests (pax)', totalGuests],
+        ['Total Feedback', feedbackStats.total],
+        ['Average Rating', feedbackStats.avg.toFixed(1)],
+      ],
+      styles: { fontSize: 9 },
+      headStyles: { fillColor: gold, textColor: 255 },
+      alternateRowStyles: { fillColor: [250, 250, 250] },
+      margin: { left: 14, right: 14 },
+    })
+
+    // Rooms most used
+    doc.setFontSize(11)
+    doc.setFont('helvetica', 'bold')
+    doc.text('Rooms Most Used', 14, doc.lastAutoTable.finalY + 12)
+    autoTable(doc, {
+      startY: doc.lastAutoTable.finalY + 16,
+      head: [['Room', 'Stays']],
+      body: roomsMostUsed.length > 0
+        ? roomsMostUsed.map(r => [r.name, r.count])
+        : [['No data', '']],
+      styles: { fontSize: 9 },
+      headStyles: { fillColor: gold, textColor: 255 },
+      alternateRowStyles: { fillColor: [250, 250, 250] },
+      margin: { left: 14, right: 14 },
+    })
+
+    // Feedback summary
+    doc.setFontSize(11)
+    doc.setFont('helvetica', 'bold')
+    doc.text('Feedback Summary', 14, doc.lastAutoTable.finalY + 12)
+    autoTable(doc, {
+      startY: doc.lastAutoTable.finalY + 16,
+      head: [['Rating', 'Comment', 'Date']],
+      body: feedbacks.length > 0
+        ? feedbacks.map(f => [
+            `${Number(f.rating) || 0}/5`,
+            f.message || '',
+            f.created_at ? format(new Date(f.created_at), 'yyyy-MM-dd') : '',
+          ])
+        : [['No feedback', '', '']],
+      styles: { fontSize: 8 },
+      headStyles: { fillColor: gold, textColor: 255 },
+      alternateRowStyles: { fillColor: [250, 250, 250] },
+      columnStyles: { 1: { cellWidth: 110 } },
+      margin: { left: 14, right: 14 },
+    })
+
+    doc.save(`report-${month}.pdf`)
+  }
+
   function exportCSV() {
     const { bookingRows, feedbackRows } = buildExportRows()
     const all = [...bookingRows, ...feedbackRows]
@@ -223,6 +304,10 @@ export default function Reports() {
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={exportPDF} className="gap-2 cursor-pointer">
+                <FileDown className="h-4 w-4 text-red-500" />
+                Export as PDF (.pdf)
+              </DropdownMenuItem>
               <DropdownMenuItem onClick={exportExcel} className="gap-2 cursor-pointer">
                 <FileSpreadsheet className="h-4 w-4 text-green-600" />
                 Export as Excel (.xlsx)
