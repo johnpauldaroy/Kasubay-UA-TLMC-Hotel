@@ -10,7 +10,18 @@ import { Badge } from '@/components/ui/badge'
 import { Card, CardContent } from '@/components/ui/card'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Plus, Pencil, Trash2, BedDouble, X, Upload, Loader2 } from 'lucide-react'
+
+const ROOM_TYPES = [
+  { value: 'single',    label: 'Single' },
+  { value: 'double',    label: 'Double' },
+  { value: 'triple',    label: 'Triple' },
+  { value: 'quad',      label: 'Quad' },
+  { value: 'suite',     label: 'Suite' },
+  { value: 'event',     label: 'Event Hall' },
+  { value: 'other',     label: 'Other' },
+]
 
 const BUCKET = 'room-images'
 
@@ -199,9 +210,15 @@ export default function Rooms() {
                 <Input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} />
               </div>
               <div className="space-y-2">
-                <Label>Type / Tag</Label>
-                <Input placeholder="single, double, triple, event" value={form.tag}
-                  onChange={e => setForm(f => ({ ...f, tag: e.target.value }))} />
+                <Label>Type</Label>
+                <Select value={form.tag} onValueChange={val => setForm(f => ({ ...f, tag: val }))}>
+                  <SelectTrigger><SelectValue placeholder="Select type" /></SelectTrigger>
+                  <SelectContent>
+                    {ROOM_TYPES.map(t => (
+                      <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
               <div className="space-y-2">
                 <Label>Price / Night (₱)</Label>
